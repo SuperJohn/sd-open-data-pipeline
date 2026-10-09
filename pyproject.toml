@@ -1,0 +1,46 @@
+[project]
+name = "sd-open-data-pipeline"
+version = "0.1.0"
+description = "End-to-end analytics pipeline over San Diego 'Get It Done' 311 requests: DuckDB + dbt + Dagster + Streamlit."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+authors = [{ name = "John Houghton" }]
+license = { text = "MIT" }
+dependencies = [
+    "duckdb>=1.1",
+    "pandas>=2.2",
+    "pandera>=0.20",
+    "requests>=2.32",
+    "dbt-core>=1.9",
+    "dbt-duckdb>=1.9",
+    "dagster>=1.9",
+    "dagster-dbt>=0.25",
+    "dagster-webserver>=1.9",
+    "streamlit>=1.40",
+    "plotly>=5.24",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sd311"]
+
+[tool.dagster]
+module_name = "sd311.definitions"
+code_location_name = "sd311"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["dbt/target", "dbt/dbt_packages"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
