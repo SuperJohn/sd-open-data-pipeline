@@ -52,3 +52,18 @@ def test_missing_column_fails():
 
 def test_too_few_rows_fails():
     assert not validate_frame(_frame(10)).passed
+
+
+def test_unexpected_column_fails():
+    df = _frame()
+    df["public_description"] = "noise"
+    report = validate_frame(df)
+    assert not report.passed
+    assert any("unexpected columns" in f and "public_description" in f for f in report.failures)
+
+
+def test_lineage_columns_are_allowed():
+    df = _frame()
+    df["_source_file"] = "sample.csv"
+    df["_loaded_at"] = "2026-10-09"
+    assert validate_frame(df).passed

@@ -1,7 +1,8 @@
 """Extract + load: land Get It Done CSVs in DuckDB as an append-only raw table.
 
 Raw data is loaded as VARCHAR on purpose: typing, cleaning and deduplication
-happen in dbt (staging), so a schema change upstream never breaks the load.
+happen in dbt (staging). Schema *presence* is enforced by
+``sd311.contracts`` before load so added/removed columns fail fast.
 """
 
 from __future__ import annotations
@@ -17,33 +18,12 @@ import duckdb
 import requests
 
 from sd311 import config
+from sd311.contracts import EXPECTED_COLUMNS, assert_csv_schema
 
 log = logging.getLogger(__name__)
 
-EXPECTED_COLUMNS = [
-    "service_request_id",
-    "service_request_parent_id",
-    "sap_notification_number",
-    "date_requested",
-    "case_age_days",
-    "case_record_type",
-    "service_name",
-    "service_name_detail",
-    "date_closed",
-    "status",
-    "lat",
-    "lng",
-    "street_address",
-    "zipcode",
-    "council_district",
-    "comm_plan_code",
-    "comm_plan_name",
-    "park_name",
-    "case_origin",
-    "referred",
-    "iamfloc",
-    "floc",
-]
+# Re-export for callers that historically imported from ingest.
+__all__ = ["EXPECTED_COLUMNS", "LoadResult", "load_to_duckdb", "resolve_source_files", "main"]
 
 
 @dataclass(frozen=True)
@@ -91,8 +71,10 @@ def load_to_duckdb(files: list[Path], db_path: Path | None = None) -> LoadResult
     table = f"{config.RAW_SCHEMA}.{config.RAW_TABLE}"
     file_list = [str(f) for f in files]
     for f in files:
-        if not Path(f).exists():
+        path = Path(f)
+        if not path.exists():
             raise FileNotFoundError(f)
+        assert_csv_schema(path)
 
     select_cols = ", ".join(EXPECTED_COLUMNS)
     with duckdb.connect(str(db_path)) as con:

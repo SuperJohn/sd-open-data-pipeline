@@ -33,7 +33,7 @@ class IngestConfig(dg.Config):
     name="get_it_done_requests",
     group_name="ingest",
     kinds={"python", "duckdb"},
-    description="Get It Done 311 CSVs (open + closed this year) landed as VARCHAR in DuckDB.",
+    description="Get It Done 311 CSVs as VARCHAR; schema contract blocks column drift before load.",
 )
 def raw_get_it_done_requests(
     context: dg.AssetExecutionContext, config: IngestConfig
@@ -51,7 +51,7 @@ def raw_get_it_done_requests(
 
 @dg.asset_check(asset=raw_get_it_done_requests, blocking=True)
 def raw_schema_and_quality_gate() -> dg.AssetCheckResult:
-    """Pandera gate: blocks downstream dbt models if the landing table looks wrong."""
+    """Pandera gate (+ ingest schema contract): blocks dbt if the landing table looks wrong."""
     report = validate_raw_table()
     return dg.AssetCheckResult(
         passed=report.passed,

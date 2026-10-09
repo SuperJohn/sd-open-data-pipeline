@@ -87,7 +87,8 @@ Without Dagster, the same flow is `make ingest && make dbt-build`.
 
 | Where | Check | Catches | Severity |
 |---|---|---|---|
-| Pre-dbt (pandera, Dagster blocking check) | required columns present | upstream schema changes or renamed columns | **block** |
+| Ingest (schema contract) | CSV headers match EXPECTED_COLUMNS | added or removed columns in the source extract | **block** |
+| Pre-dbt (pandera, Dagster blocking check) | required columns present; no unexpected columns | upstream schema changes or renamed columns | **block** |
 | | `service_request_id` unique and not null | a bad extract or double load | **block** |
 | | `date_requested` parseable, `status` in the known set | format drift or new status codes | **block** |
 | | ≥ 100 rows | an empty or truncated download | **block** |
@@ -117,6 +118,7 @@ current year. Loading historical closed files is on the roadmap.
 ```
 src/sd311/
   config.py         # env-driven settings (SD311_SOURCE, SD311_DUCKDB_PATH)
+  contracts.py      # raw CSV schema contract (fail fast on column drift)
   ingest.py         # download + load to DuckDB (CLI: python -m sd311.ingest)
   quality.py        # pandera pre-transform gate
   definitions.py    # Dagster assets, asset check, dbt assets, job, schedule

@@ -1,8 +1,9 @@
 """Pre-transform data quality gate on the raw landing table (pandera).
 
 dbt tests cover the modeled layers; this gate catches problems *before* dbt
-runs: a missing column, an empty extract, unparseable timestamps, or a load
-that suddenly contains duplicate request ids.
+runs: missing or unexpected columns, an empty extract, unparseable timestamps,
+or a load that suddenly contains duplicate request ids. CSV header drift is
+also blocked earlier by ``sd311.contracts`` at ingest time.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import pandas as pd
 import pandera.pandas as pa
 
 from sd311 import config
-from sd311.ingest import EXPECTED_COLUMNS
+from sd311.contracts import EXPECTED_COLUMNS
 
 VALID_STATUSES = ["New", "In Process", "Closed", "Referred"]
 MIN_ROWS = 100
@@ -49,9 +50,14 @@ class QualityReport:
 
 def validate_frame(df: pd.DataFrame) -> QualityReport:
     failures: list[str] = []
-    missing = sorted(set(EXPECTED_COLUMNS) - set(df.columns))
+    # Lineage columns stamped at load (_source_file, _loaded_at) are allowed.
+    data_cols = {c for c in df.columns if not c.startswith("_")}
+    missing = sorted(set(EXPECTED_COLUMNS) - data_cols)
+    unexpected = sorted(data_cols - set(EXPECTED_COLUMNS))
     if missing:
         failures.append(f"missing columns: {missing}")
+    if unexpected:
+        failures.append(f"unexpected columns: {unexpected}")
     try:
         RAW_SCHEMA.validate(df, lazy=True)
     except pa.errors.SchemaErrors as exc:
