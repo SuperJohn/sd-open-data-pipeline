@@ -1,0 +1,23 @@
+version: 2
+sources:
+  - name: raw
+    description: Landing zone. Loaded by `sd311.ingest` (Dagster asset `raw/get_it_done_requests`), all
+      columns VARCHAR.
+    schema: raw
+    tables:
+      - name: get_it_done_requests
+        description: 'City of San Diego "Get It Done" 311 service requests (open requests + requests closed
+          in the current year). Source: https://data.sandiego.gov/datasets/get-it-done-311/
+
+          '
+        columns:
+          - name: service_request_id
+            data_tests:
+              - not_null
+          - name: date_requested
+            data_tests:
+              - not_null
+        data_tests:
+          - min_row_count:
+              arguments:
+                min_rows: 100

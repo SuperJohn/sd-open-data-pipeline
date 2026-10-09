@@ -1,0 +1,53 @@
+version: 2
+models:
+  - name: fct_requests
+    description: One row per Get It Done request with lifecycle, SLA and location attributes.
+    columns:
+      - name: service_request_id
+        data_tests:
+          - unique
+          - not_null
+      - name: status
+        data_tests:
+          - not_null
+      - name: latitude
+        description: Null when the geocode falls outside the city bounding box.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 32.53
+                max_value: 33.12
+  - name: mart_service_daily
+    description: Requests opened per day and service.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns:
+              - requested_date
+              - service_name
+    columns:
+      - name: requests_opened
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 1
+  - name: mart_service_performance
+    description: Service-level KPI table (volume, median / p90 days to close, SLA %, backlog).
+    columns:
+      - name: service_name
+        data_tests:
+          - unique
+          - not_null
+      - name: pct_closed_within_sla
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+  - name: mart_district_performance
+    description: Council district scorecard.
+    columns:
+      - name: council_district
+        data_tests:
+          - unique
+          - not_null

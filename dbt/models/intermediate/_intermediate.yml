@@ -1,0 +1,25 @@
+version: 2
+models:
+  - name: int_requests__enriched
+    description: Requests enriched with lifecycle flags, resolution time and calendar attributes.
+    columns:
+      - name: service_request_id
+        data_tests:
+          - unique
+          - not_null
+      - name: days_to_close
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 3650
+              config:
+                severity: warn
+      - name: channel
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Self-service
+                  - Assisted
+                  - Internal / other

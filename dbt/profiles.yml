@@ -1,0 +1,7 @@
+sd311:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('SD311_DUCKDB_PATH', '../data/warehouse/sd311.duckdb') }}"
+      threads: 4

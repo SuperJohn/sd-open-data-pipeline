@@ -1,0 +1,58 @@
+version: 2
+models:
+  - name: stg_get_it_done__requests
+    description: Typed, trimmed and deduplicated 311 requests (grain = service_request_id).
+    data_tests:
+      - min_row_count:
+          arguments:
+            min_rows: 100
+    columns:
+      - name: service_request_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: requested_at
+        data_tests:
+          - not_null
+          - in_range:
+              arguments:
+                min_value: "'2016-01-01'::timestamp"
+      - name: closed_at
+        data_tests:
+          - not_before:
+              arguments:
+                other_column: cast(requested_at as date)
+              config:
+                severity: warn
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - New
+                  - In Process
+                  - Closed
+                  - Referred
+      - name: service_name
+        data_tests:
+          - not_null
+      - name: council_district
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 1
+                max_value: 9
+          - max_null_fraction:
+              arguments:
+                max_fraction: 0.05
+              config:
+                severity: warn
+      - name: latitude
+        data_tests:
+          - max_null_fraction:
+              arguments:
+                max_fraction: 0.05
+              config:
+                severity: warn

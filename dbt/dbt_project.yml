@@ -1,0 +1,30 @@
+name: sd311
+version: "0.1.0"
+config-version: 2
+profile: sd311
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # San Diego city bounding box used to flag bad geocodes
+  sd_lat_min: 32.53
+  sd_lat_max: 33.12
+  sd_lng_min: -117.30
+  sd_lng_max: -116.90
+  sla_days: 30
+
+models:
+  sd311:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
