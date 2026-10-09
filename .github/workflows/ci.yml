@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SD311_SOURCE: sample
+      SD311_DUCKDB_PATH: ${{ github.workspace }}/data/warehouse/ci.duckdb
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Unit + integration tests
+        run: uv run pytest -q
+
+      - name: Load sample + dbt build (models + data tests)
+        run: |
+          mkdir -p data/warehouse
+          uv run python -m sd311.ingest --source sample
+          uv run dbt build --project-dir dbt --profiles-dir dbt
+
+      - name: Dagster end-to-end materialization
+        run: |
+          export DAGSTER_HOME=$(mktemp -d)
+          uv run dagster asset materialize -m sd311.definitions --select '*' \
+            --config-json '{"ops": {"raw__get_it_done_requests": {"config": {"source": "sample"}}}}'
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-target
+          path: dbt/target/*.json
+          if-no-files-found: ignore
