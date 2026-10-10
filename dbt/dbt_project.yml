@@ -6,6 +6,7 @@ profile: sd311
 model-paths: ["models"]
 macro-paths: ["macros"]
 test-paths: ["tests"]
+docs-paths: ["docs"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 

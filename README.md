@@ -1,6 +1,7 @@
 # sd-open-data-pipeline
 
 [![ci](https://github.com/SuperJohn/sd-open-data-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/SuperJohn/sd-open-data-pipeline/actions/workflows/ci.yml)
+[![docs](https://img.shields.io/badge/dbt_docs-GitHub_Pages-orange)](https://superjohn.github.io/sd-open-data-pipeline/)
 ![python](https://img.shields.io/badge/python-3.12-blue) ![dbt](https://img.shields.io/badge/dbt-duckdb-orange) ![dagster](https://img.shields.io/badge/orchestration-dagster-purple)
 
 An end-to-end, production-shaped analytics pipeline over the City of San Diego's
@@ -67,6 +68,7 @@ make dashboard            # http://localhost:8501
 make run SOURCE=live      # same pipeline against today's full extract (~140 MB download)
 make dev                  # Dagster UI at http://localhost:3000 (lineage, checks, schedule)
 make test                 # ruff + pytest (unit + dbt integration)
+make docs                 # dbt docs site -> ./site (also deployed on main)
 ```
 
 Without Dagster, the same flow is `make ingest && make dbt-build`.
@@ -122,7 +124,9 @@ src/sd311/
   ingest.py         # download + load to DuckDB (CLI: python -m sd311.ingest)
   quality.py        # pandera pre-transform gate
   definitions.py    # Dagster assets, asset check, dbt assets, job, schedule
+  docs.py           # package dbt docs artifacts for GitHub Pages
 dbt/
+  docs/overview.md  # dbt docs homepage
   models/{staging,intermediate,marts}/
   tests/generic/    # in_range, not_before, max_null_fraction, min_row_count, unique_combination
   tests/singular/   # reconciliation + future-dated requests
@@ -139,6 +143,7 @@ tests/              # pytest: ingest, quality gate, dbt integration, Dagster def
 - [ ] dbt source freshness, plus Dagster freshness policies and alerting
 - [ ] Snapshot (SCD2) of request status to measure reopen rates
 - [ ] Publish marts to MotherDuck or Parquet on S3 and deploy the dashboard
+- [x] Publish dbt docs to GitHub Pages (CI builds `site/`, deploys on main)
 - [ ] Data contracts on the marts (dbt model contracts + versioned schemas)
 
 ## Data & license

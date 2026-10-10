@@ -14,3 +14,4 @@ logs/
 *.duckdb.wal
 .env
 .DS_Store
+site/

@@ -6,7 +6,7 @@ RUN := uv run
 DBT := $(RUN) dbt --no-use-colors
 DBT_ARGS := --project-dir dbt --profiles-dir dbt
 
-.PHONY: help setup ingest dbt-build run dev test lint format dashboard clean
+.PHONY: help setup ingest dbt-build docs run dev test lint format dashboard clean
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -21,6 +21,10 @@ ingest:  ## Load raw CSVs into DuckDB (SOURCE=sample|live)
 
 dbt-build:  ## dbt build (models + tests) against the current warehouse
 	$(DBT) build $(DBT_ARGS)
+
+docs:  ## Generate dbt docs and package a static site/ for GitHub Pages
+	$(DBT) docs generate $(DBT_ARGS)
+	$(RUN) python -c "from pathlib import Path; from sd311.docs import package_docs_site; print('packed', *[p.name for p in package_docs_site(Path('dbt/target'), Path('site'))])"
 
 run: setup  ## Full pipeline through Dagster: ingest -> pandera gate -> dbt build
 	$(RUN) dagster asset materialize -m sd311.definitions --select '*' \
@@ -44,4 +48,4 @@ dashboard:  ## Streamlit dashboard on http://localhost:8501
 	$(RUN) streamlit run dashboard/app.py
 
 clean:  ## Remove warehouse, dbt artifacts, downloads
-	rm -rf data/warehouse data/raw dbt/target dbt/logs .dagster .pytest_cache
+	rm -rf data/warehouse data/raw dbt/target dbt/logs site .dagster .pytest_cache
