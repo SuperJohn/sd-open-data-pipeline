@@ -10,11 +10,6 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -45,11 +40,10 @@ jobs:
           uv run python -m sd311.ingest --source sample
           uv run dbt build --project-dir dbt --profiles-dir dbt
 
-      - name: Generate dbt docs site
+      - name: Generate and package dbt docs
         run: |
           uv run dbt docs generate --project-dir dbt --profiles-dir dbt
-          uv run python -c "from pathlib import Path; from sd311.docs import package_docs_site; \
-print('packed', *[p.name for p in package_docs_site(Path('dbt/target'), Path('site'))])"
+          uv run python -c "from pathlib import Path; from sd311.docs import package_docs_site; print('packed', *[p.name for p in package_docs_site(Path('dbt/target'), Path('site'))])"
 
       - name: Dagster end-to-end materialization
         run: |
@@ -65,20 +59,8 @@ print('packed', *[p.name for p in package_docs_site(Path('dbt/target'), Path('si
           path: dbt/target/*.json
           if-no-files-found: ignore
 
-      - name: Upload Pages artifact
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload docs site artifact
+        uses: actions/upload-artifact@v4
         with:
+          name: dbt-docs-site
           path: site
-
-  deploy-docs:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: test
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
