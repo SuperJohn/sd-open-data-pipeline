@@ -10,6 +10,12 @@ sources:
           in the current year). Source: https://data.sandiego.gov/datasets/get-it-done-311/
 
           '
+        # Ingest stamps `_loaded_at` at load time. Daily schedule expects a fresh load within ~1 day;
+        # warn at 24h and error at 48h so a missed run surfaces before the weekend piles up.
+        loaded_at_field: _loaded_at
+        freshness:
+          warn_after: {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
         columns:
           - name: service_request_id
             data_tests:

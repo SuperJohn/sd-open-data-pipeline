@@ -27,6 +27,8 @@ small team's first production pipeline:
   Dagster asset check, so a broken extract never reaches the marts.
 - **Orchestration as software-defined assets.** dbt models and tests show up in Dagster as
   assets and asset checks, with one lineage graph from the CSV to the dashboard.
+- **Source freshness with alerting.** dbt watches `_loaded_at`; a Dagster sensor polls load
+  and city-feed clocks and requests a live refresh when either goes stale.
 - **Laptop-to-CI parity.** The same `make` targets run locally and in GitHub Actions.
 
 ## Architecture
@@ -68,6 +70,7 @@ make dashboard            # http://localhost:8501
 make run SOURCE=live      # same pipeline against today's full extract (~140 MB download)
 make dev                  # Dagster UI at http://localhost:3000 (lineage, checks, schedule)
 make test                 # ruff + pytest (unit + dbt integration)
+make freshness            # dbt source freshness against the current warehouse
 make docs                 # dbt docs site -> ./site (also deployed on main)
 ```
 
@@ -95,6 +98,9 @@ Without Dagster, the same flow is `make ingest && make dbt-build`.
 | | `date_requested` parseable, `status` in the known set | format drift or new status codes | **block** |
 | | ≥ 100 rows | an empty or truncated download | **block** |
 | dbt source | `not_null` keys, `min_row_count` | the same issues, at the dbt layer | error |
+| dbt source freshness | `_loaded_at` warn 24h / error 48h (`dbt source freshness`) | missed ingest or a stuck schedule | warn / error |
+| Pre-dbt (freshness gate) | load age (`_loaded_at`) and city-feed age (`date_requested`) | warehouse not refreshed, or city extract stopped updating | warn / error |
+| Dagster freshness | `FreshnessPolicy` on raw asset + `city_feed_freshness_sensor` | alerts and requests a live refresh when clocks exceed error thresholds | alert |
 | staging | `unique` / `not_null` PK, `accepted_values(status)` | broken dedupe logic, new statuses | error |
 | | `in_range(council_district, 1, 9)` | bad district codes | error |
 | | `not_before(closed_at, requested_at)` | requests closed before they were opened | warn |
@@ -123,7 +129,8 @@ src/sd311/
   contracts.py      # raw CSV schema contract (fail fast on column drift)
   ingest.py         # download + load to DuckDB (CLI: python -m sd311.ingest)
   quality.py        # pandera pre-transform gate
-  definitions.py    # Dagster assets, asset check, dbt assets, job, schedule
+  freshness.py      # load + city-feed freshness clocks (dbt + Dagster sensor)
+  definitions.py    # Dagster assets, checks, dbt assets, job, schedule, freshness sensors
   docs.py           # package dbt docs artifacts for GitHub Pages
 dbt/
   docs/overview.md  # dbt docs homepage
@@ -140,7 +147,7 @@ tests/              # pytest: ingest, quality gate, dbt integration, Dagster def
 - [ ] Incremental loads: partition by close year, `is_incremental()` models, Dagster partitions
 - [ ] Backfill prior years' closed extracts to remove the coverage caveat
 - [ ] Spatial join to official council district and community plan polygons (DuckDB `spatial`)
-- [ ] dbt source freshness, plus Dagster freshness policies and alerting
+- [x] dbt source freshness, plus Dagster FreshnessPolicy and city-feed alert sensor
 - [ ] Snapshot (SCD2) of request status to measure reopen rates
 - [ ] Publish marts to MotherDuck or Parquet on S3 and deploy the dashboard
 - [x] Publish dbt docs to GitHub Pages (CI builds `site/`, deploys on main)

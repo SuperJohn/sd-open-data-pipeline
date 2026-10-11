@@ -38,6 +38,7 @@ jobs:
         run: |
           mkdir -p data/warehouse
           uv run python -m sd311.ingest --source sample
+          uv run dbt source freshness --project-dir dbt --profiles-dir dbt
           uv run dbt build --project-dir dbt --profiles-dir dbt
 
       - name: Generate and package dbt docs

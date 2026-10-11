@@ -1,12 +1,13 @@
 SHELL := /bin/bash
 SOURCE ?= sample            # sample (offline, checked in) | live (download from data.sandiego.gov)
 export SD311_SOURCE := $(strip $(SOURCE))
+export SD311_DUCKDB_PATH ?= $(CURDIR)/data/warehouse/sd311.duckdb
 export DAGSTER_HOME ?= $(CURDIR)/.dagster
 RUN := uv run
 DBT := $(RUN) dbt --no-use-colors
 DBT_ARGS := --project-dir dbt --profiles-dir dbt
 
-.PHONY: help setup ingest dbt-build docs run dev test lint format dashboard clean
+.PHONY: help setup ingest dbt-build freshness docs run dev test lint format dashboard clean
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -21,6 +22,9 @@ ingest:  ## Load raw CSVs into DuckDB (SOURCE=sample|live)
 
 dbt-build:  ## dbt build (models + tests) against the current warehouse
 	$(DBT) build $(DBT_ARGS)
+
+freshness:  ## dbt source freshness (warn/error on stale _loaded_at)
+	$(DBT) source freshness $(DBT_ARGS)
 
 docs:  ## Generate dbt docs and package a static site/ for GitHub Pages
 	$(DBT) docs generate $(DBT_ARGS)
