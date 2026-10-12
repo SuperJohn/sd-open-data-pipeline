@@ -65,3 +65,56 @@ jobs:
         with:
           name: dbt-docs-site
           path: site
+
+  docker:
+    # Builds the image and smoke-tests `docker compose up`: pipeline must finish,
+    # then the Dagster UI and the dashboard must both report healthy.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker compose build
+
+      - name: Start stack
+        run: docker compose up -d
+
+      - name: Wait for pipeline and UIs
+        run: |
+          for i in $(seq 1 60); do
+            state=$(docker compose ps -a pipeline --format '{{.State}} {{.ExitCode}}')
+            case "$state" in
+              "exited 0") break ;;
+              exited*) echo "pipeline failed: $state"; exit 1 ;;
+            esac
+            sleep 5
+          done
+          for i in $(seq 1 40); do
+            d=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/server_info || true)
+            s=$(curl -s http://localhost:8501/_stcore/health || true)
+            if [ "$d" = "200" ] && [ "$s" = "ok" ]; then
+              echo "dagster=$d dashboard=$s"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "timed out: dagster=$d dashboard=$s"
+          exit 1
+
+      - name: Check the warehouse was built
+        run: |
+          docker compose exec -T dashboard python -c "
+          import duckdb, os
+          con = duckdb.connect(os.environ['SD311_DUCKDB_PATH'], read_only=True)
+          n = con.execute('select count(*) from marts.fct_requests').fetchone()[0]
+          print('fct_requests rows:', n)
+          assert n > 0
+          "
+
+      - name: Logs
+        if: always()
+        run: docker compose logs --no-color --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

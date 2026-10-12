@@ -7,7 +7,7 @@ RUN := uv run
 DBT := $(RUN) dbt --no-use-colors
 DBT_ARGS := --project-dir dbt --profiles-dir dbt
 
-.PHONY: help setup ingest dbt-build freshness docs run dev test lint format dashboard clean
+.PHONY: help setup ingest dbt-build freshness docs run dev test lint format dashboard up down clean
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -50,6 +50,13 @@ format:  ## Ruff autoformat
 
 dashboard:  ## Streamlit dashboard on http://localhost:8501
 	$(RUN) streamlit run dashboard/app.py
+
+up:  ## docker compose: build, run the pipeline, then Dagster :3000 + dashboard :8501
+	docker compose up --build -d
+	@echo "Dagster UI: http://localhost:3000   Dashboard: http://localhost:8501"
+
+down:  ## docker compose: stop the stack and drop its volumes
+	docker compose down -v
 
 clean:  ## Remove warehouse, dbt artifacts, downloads
 	rm -rf data/warehouse data/raw dbt/target dbt/logs site .dagster .pytest_cache

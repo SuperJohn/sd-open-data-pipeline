@@ -76,6 +76,23 @@ make docs                 # dbt docs site -> ./site (also deployed on main)
 
 Without Dagster, the same flow is `make ingest && make dbt-build`.
 
+### With Docker
+
+One command builds the image, runs the pipeline once on the sample data, and then
+starts the Dagster UI and the dashboard (requires Docker with Compose v2):
+
+```bash
+docker compose up --build              # or: make up / make down
+# Dagster UI  http://localhost:3000    Dashboard  http://localhost:8501
+
+SD311_SOURCE=live docker compose up --build   # same stack against the live extract
+```
+
+All three services share one image (`docker/entrypoint.sh` picks the role: `pipeline`,
+`dagster`, or `dashboard`) and one named `warehouse` volume holding the DuckDB file.
+The dashboard and Dagster wait for the pipeline to finish before starting. CI builds the
+image and smoke-tests the whole stack on every push.
+
 ## Data lineage
 
 | Layer | Object | Grain | What happens |
@@ -138,6 +155,7 @@ dbt/
   tests/generic/    # in_range, not_before, max_null_fraction, min_row_count, unique_combination
   tests/singular/   # reconciliation + future-dated requests
 dashboard/app.py    # Streamlit over the marts
+docker/entrypoint.sh # container roles: pipeline | dagster | dashboard
 data/sample/        # 4,000-row sample (1,500 open + 2,500 closed), free-text column removed
 tests/              # pytest: ingest, quality gate, dbt integration, Dagster definitions
 ```
