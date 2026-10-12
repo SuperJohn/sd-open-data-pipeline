@@ -1,0 +1,58 @@
+# One-command local stack:  docker compose up --build
+#   pipeline   builds the warehouse once (sample data by default), then exits
+#   dagster    Dagster UI on http://localhost:3000 (lineage, checks, schedule, sensor)
+#   dashboard  Streamlit on http://localhost:8501
+# Live data:   SD311_SOURCE=live docker compose up --build   (~140 MB download)
+
+x-sd311: &sd311
+  build: .
+  image: sd-open-data-pipeline:local
+  environment:
+    SD311_SOURCE: ${SD311_SOURCE:-sample}
+    SD311_DUCKDB_PATH: /app/data/warehouse/sd311.duckdb
+    DAGSTER_HOME: /opt/dagster/home
+  volumes:
+    - warehouse:/app/data/warehouse
+    - dagster-home:/opt/dagster/home
+
+services:
+  pipeline:
+    <<: *sd311
+    command: ["pipeline"]
+    restart: "no"
+
+  dagster:
+    <<: *sd311
+    command: ["dagster"]
+    ports:
+      - "${DAGSTER_PORT:-3000}:3000"
+    depends_on:
+      pipeline:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/server_info', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  dashboard:
+    <<: *sd311
+    command: ["dashboard"]
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    depends_on:
+      pipeline:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  warehouse:
+  dagster-home:
