@@ -21,14 +21,29 @@ DUCKDB_PATH = Path(
 
 # Get It Done (311) request extracts published at https://data.sandiego.gov/datasets/get-it-done-311/
 SEED_BASE_URL = "https://seshat.datasd.org/get_it_done_reports"
+
+# Closed extracts start in 2016 on the city portal. Override with SD311_CLOSED_START_YEAR.
+CLOSED_START_YEAR = int(os.getenv("SD311_CLOSED_START_YEAR", "2016"))
+
+LIVE_OPEN_FILE = "get_it_done_requests_open_datasd.csv"
+LIVE_CLOSED_TEMPLATE = "get_it_done_requests_closed_{year}_datasd.csv"
+
+SAMPLE_OPEN_FILE = "get_it_done_open_sample.csv"
+# Year-tagged closed samples (small multi-year fixtures for offline backfill tests).
+SAMPLE_CLOSED_TEMPLATE = "get_it_done_closed_{year}_sample.csv"
+
+# Legacy aliases kept for callers/tests that still reference the old dict shape.
 LIVE_FILES = {
-    "open": "get_it_done_requests_open_datasd.csv",
-    "closed_current_year": "get_it_done_requests_closed_{year}_datasd.csv",
+    "open": LIVE_OPEN_FILE,
+    "closed_current_year": LIVE_CLOSED_TEMPLATE,
 }
 SAMPLE_FILES = {
-    "open": "get_it_done_open_sample.csv",
-    "closed_current_year": "get_it_done_closed_sample.csv",
+    "open": SAMPLE_OPEN_FILE,
+    "closed_current_year": SAMPLE_CLOSED_TEMPLATE.format(year=2026),
 }
 
 RAW_SCHEMA = "raw"
 RAW_TABLE = "get_it_done_requests"
+
+# Open-request extract has no close-year; stamped as NULL in `_source_year`.
+OPEN_SOURCE_YEAR: int | None = None
