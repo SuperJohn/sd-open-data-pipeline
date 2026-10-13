@@ -19,8 +19,8 @@ schedule → Streamlit dashboard.** It runs on a laptop in under a minute agains
 Most "portfolio pipelines" stop at a notebook. This one is built the way I'd build a
 small team's first production pipeline:
 
-- **Idempotent, replayable loads.** Raw data lands as untyped VARCHAR with file lineage, and
-  all typing and cleaning happens in version-controlled SQL.
+- **Idempotent, year-partitioned loads.** Raw data lands as untyped VARCHAR with file and
+  close-year lineage (`_source_year`); reloading one year does not touch the others.
 - **Layered dbt models** with tests at every layer, including custom generic tests and a
   reconciliation test between the fact table and the aggregates.
 - **A blocking quality gate before transformation.** A pandera schema check runs as a
@@ -40,7 +40,7 @@ flowchart LR
         A2[get_it_done_requests_closed_YYYY.csv]
     end
     subgraph Ingest["Dagster asset: raw/get_it_done_requests"]
-        B[sd311.ingest<br/>download + load as VARCHAR<br/>+ _source_file, _loaded_at]
+        B[sd311.ingest<br/>download + load as VARCHAR<br/>+ _source_file, _source_year, _loaded_at]
     end
     G{{pandera gate<br/>blocking asset check}}
     subgraph DuckDB["DuckDB warehouse"]
@@ -67,7 +67,8 @@ make setup                # uv sync + dbt parse
 make run                  # Dagster: ingest sample -> pandera gate -> dbt build (models + tests)
 make dashboard            # http://localhost:8501
 
-make run SOURCE=live      # same pipeline against today's full extract (~140 MB download)
+make run SOURCE=live      # open + closed years 2016→current (~GB-scale download)
+make ingest START_YEAR=2020 SOURCE=live   # backfill closed years from 2020 only
 make dev                  # Dagster UI at http://localhost:3000 (lineage, checks, schedule)
 make test                 # ruff + pytest (unit + dbt integration)
 make freshness            # dbt source freshness against the current warehouse
@@ -97,7 +98,7 @@ image and smoke-tests the whole stack on every push.
 
 | Layer | Object | Grain | What happens |
 |---|---|---|---|
-| raw | `raw.get_it_done_requests` | one row per CSV row | Full refresh from the open and current-year closed extracts. All VARCHAR, plus `_source_file` and `_loaded_at`. |
+| raw | `raw.get_it_done_requests` | one row per CSV row | Idempotent load of the open extract plus closed_YYYY files from `CLOSED_START_YEAR` (default 2016) through the current year. All VARCHAR, plus `_source_file`, `_source_year` (NULL for open), and `_loaded_at`. Reloading a year replaces that partition only. |
 | staging | `stg_get_it_done__requests` | `service_request_id` | Casts with `try_cast`, trims, and turns empty strings into NULL. **Dedupes requests that appear in both extracts** while they transition, preferring the closed record. |
 | intermediate | `int_requests__enriched` | `service_request_id` | `days_to_close`, `open_age_days`, `is_open`, channel (self-service, assisted, or internal), calendar fields, and **geo validity against the city bounding box**. |
 | marts | `fct_requests` | `service_request_id` | Analytics-ready fact with `closed_within_sla` (30 days by default, via `var('sla_days')`). Invalid geocodes are nulled. |
@@ -133,10 +134,10 @@ warnings**, both real findings in the source data: one request closed before its
 open date, and one ticket that took more than 10 years to close. Warnings surface in
 Dagster as failed (non-blocking) asset checks, so they're visible without paging anyone.
 
-**Known coverage caveat (found while building the dashboard):** the city publishes
-*open* requests plus requests *closed in a given year*. Without the prior-year closed
-files, earlier periods are under-counted, so the dashboard trend is limited to the
-current year. Loading historical closed files is on the roadmap.
+**Coverage:** the city publishes *open* requests plus one closed extract per calendar
+year. Live ingest backfills closed files from `SD311_CLOSED_START_YEAR` / `--start-year`
+(default 2016) through the current year so multi-year trends are not under-counted.
+Sample/CI mode uses small year-tagged fixtures (2024–2026) offline.
 
 ## Project layout
 
@@ -156,14 +157,14 @@ dbt/
   tests/singular/   # reconciliation + future-dated requests
 dashboard/app.py    # Streamlit over the marts
 docker/entrypoint.sh # container roles: pipeline | dagster | dashboard
-data/sample/        # 4,000-row sample (1,500 open + 2,500 closed), free-text column removed
+data/sample/        # 4,000-row sample (1,500 open + 800/800/900 closed 2024–2026), free-text dropped
 tests/              # pytest: ingest, quality gate, dbt integration, Dagster definitions
 ```
 
 ## Roadmap
 
-- [ ] Incremental loads: partition by close year, `is_incremental()` models, Dagster partitions
-- [ ] Backfill prior years' closed extracts to remove the coverage caveat
+- [ ] Incremental dbt models (`is_incremental()`) + Dagster partitions on top of raw `_source_year`
+- [x] Backfill prior years' closed extracts (raw `_source_year` partitions, idempotent loader)
 - [ ] Spatial join to official council district and community plan polygons (DuckDB `spatial`)
 - [x] dbt source freshness, plus Dagster FreshnessPolicy and city-feed alert sensor
 - [ ] Snapshot (SCD2) of request status to measure reopen rates

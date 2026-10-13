@@ -1,6 +1,8 @@
 SHELL := /bin/bash
 SOURCE ?= sample            # sample (offline, checked in) | live (download from data.sandiego.gov)
+START_YEAR ?= 2016          # first closed_YYYY year to backfill (live + sample)
 export SD311_SOURCE := $(strip $(SOURCE))
+export SD311_CLOSED_START_YEAR ?= $(strip $(START_YEAR))
 export SD311_DUCKDB_PATH ?= $(CURDIR)/data/warehouse/sd311.duckdb
 export DAGSTER_HOME ?= $(CURDIR)/.dagster
 RUN := uv run
@@ -17,8 +19,8 @@ setup:  ## Install Python deps (uv) and parse the dbt project
 	mkdir -p $(DAGSTER_HOME) data/warehouse
 	$(DBT) parse $(DBT_ARGS) --quiet
 
-ingest:  ## Load raw CSVs into DuckDB (SOURCE=sample|live)
-	$(RUN) python -m sd311.ingest --source $(SD311_SOURCE)
+ingest:  ## Load raw CSVs into DuckDB (SOURCE=sample|live, START_YEAR=2016)
+	$(RUN) python -m sd311.ingest --source $(SD311_SOURCE) --start-year $(SD311_CLOSED_START_YEAR)
 
 dbt-build:  ## dbt build (models + tests) against the current warehouse
 	$(DBT) build $(DBT_ARGS)
