@@ -33,6 +33,7 @@ class IngestConfig(dg.Config):
     source: str = (
         settings.SOURCE_MODE
     )  # "sample" (offline) or "live" (download from data.sandiego.gov)
+    start_year: int = settings.CLOSED_START_YEAR  # first closed_YYYY year to backfill
 
 
 @dg.asset(
@@ -40,7 +41,10 @@ class IngestConfig(dg.Config):
     name="get_it_done_requests",
     group_name="ingest",
     kinds={"python", "duckdb"},
-    description="Get It Done 311 CSVs as VARCHAR; schema contract blocks column drift before load.",
+    description=(
+        "Get It Done 311 CSVs as VARCHAR with _source_year partitions; "
+        "schema contract blocks column drift before load."
+    ),
     # Daily schedule: warn if no materialization within 24h, fail after 48h.
     freshness_policy=FreshnessPolicy.time_window(
         fail_window=dt.timedelta(hours=48),
@@ -50,13 +54,18 @@ class IngestConfig(dg.Config):
 def raw_get_it_done_requests(
     context: dg.AssetExecutionContext, config: IngestConfig
 ) -> dg.MaterializeResult:
-    result = load_to_duckdb(resolve_source_files(config.source))
-    context.log.info("loaded %s rows", result.rows)
+    files = resolve_source_files(config.source, start_year=config.start_year)
+    result = load_to_duckdb(files)
+    context.log.info("loaded %s rows (years=%s)", result.rows, result.years)
     return dg.MaterializeResult(
         metadata={
             "rows": dg.MetadataValue.int(result.rows),
             "files": dg.MetadataValue.text(", ".join(result.files)),
             "source_mode": dg.MetadataValue.text(config.source),
+            "start_year": dg.MetadataValue.int(config.start_year),
+            "partitions": dg.MetadataValue.text(
+                ", ".join("open" if y is None else str(y) for y in result.years)
+            ),
         }
     )
 

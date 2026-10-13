@@ -50,7 +50,7 @@ class QualityReport:
 
 def validate_frame(df: pd.DataFrame) -> QualityReport:
     failures: list[str] = []
-    # Lineage columns stamped at load (_source_file, _loaded_at) are allowed.
+    # Lineage columns stamped at load (_source_file, _source_year, _loaded_at) are allowed.
     data_cols = {c for c in df.columns if not c.startswith("_")}
     missing = sorted(set(EXPECTED_COLUMNS) - data_cols)
     unexpected = sorted(data_cols - set(EXPECTED_COLUMNS))

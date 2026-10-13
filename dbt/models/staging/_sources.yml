@@ -7,7 +7,7 @@ sources:
     tables:
       - name: get_it_done_requests
         description: 'City of San Diego "Get It Done" 311 service requests (open requests + requests closed
-          in the current year). Source: https://data.sandiego.gov/datasets/get-it-done-311/
+          by close year from CLOSED_START_YEAR onward). Source: https://data.sandiego.gov/datasets/get-it-done-311/
 
           '
         # Ingest stamps `_loaded_at` at load time. Daily schedule expects a fresh load within ~1 day;

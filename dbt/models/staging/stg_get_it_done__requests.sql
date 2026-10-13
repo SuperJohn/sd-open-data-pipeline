@@ -23,6 +23,7 @@ typed as (
         nullif(trim(park_name), '')                                as park_name,
         nullif(trim(referred), '')                                 as referred_to,
         _source_file,
+        _source_year,
         _loaded_at
     from source
 ),
