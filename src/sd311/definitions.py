@@ -16,6 +16,7 @@ from dagster import DefaultSensorStatus, FreshnessPolicy, SkipReason
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 
 from sd311 import config as settings
+from sd311.districts import load_districts, resolve_districts_file
 from sd311.freshness import check_source_freshness
 from sd311.ingest import load_to_duckdb, resolve_source_files
 from sd311.quality import validate_raw_table
@@ -66,6 +67,34 @@ def raw_get_it_done_requests(
             "partitions": dg.MetadataValue.text(
                 ", ".join("open" if y is None else str(y) for y in result.years)
             ),
+        }
+    )
+
+
+class DistrictsConfig(dg.Config):
+    source: str = settings.SOURCE_MODE  # "sample" (simplified, offline) or "live" (full-res)
+
+
+@dg.asset(
+    key_prefix="raw",
+    name="council_districts",
+    group_name="ingest",
+    kinds={"python", "duckdb"},
+    description=(
+        "City Council district polygons (City of San Diego GIS) as GeoJSON text; "
+        "validated to exactly districts 1-9 before load."
+    ),
+)
+def raw_council_districts(
+    context: dg.AssetExecutionContext, config: DistrictsConfig
+) -> dg.MaterializeResult:
+    result = load_districts(resolve_districts_file(config.source))
+    context.log.info("loaded %s districts from %s", result.rows, result.file)
+    return dg.MaterializeResult(
+        metadata={
+            "rows": dg.MetadataValue.int(result.rows),
+            "file": dg.MetadataValue.text(result.file),
+            "source_mode": dg.MetadataValue.text(config.source),
         }
     )
 
@@ -125,7 +154,12 @@ full_refresh_job = dg.define_asset_job(
     "sd311_daily_refresh",
     selection=dg.AssetSelection.all(),
     description="Download -> validate -> dbt build (models + tests).",
-    config={"ops": {"raw__get_it_done_requests": {"config": {"source": "live"}}}},
+    config={
+        "ops": {
+            "raw__get_it_done_requests": {"config": {"source": "live"}},
+            "raw__council_districts": {"config": {"source": "live"}},
+        }
+    },
 )
 
 daily_schedule = dg.ScheduleDefinition(
@@ -175,10 +209,13 @@ def city_feed_freshness_sensor(context: dg.SensorEvaluationContext):
 
 
 defs = dg.Definitions(
-    assets=[raw_get_it_done_requests, sd311_dbt_models],
+    assets=[raw_get_it_done_requests, raw_council_districts, sd311_dbt_models],
     asset_checks=[raw_schema_and_quality_gate, source_freshness_gate],
     jobs=[full_refresh_job],
     schedules=[daily_schedule],
     sensors=[city_feed_freshness_sensor],
     resources={"dbt": DbtCliResource(project_dir=dbt_project)},
+    # DuckDB allows a single writer process, and both raw assets write the same file, so run
+    # steps in one process (in dependency order) instead of the default multiprocess executor.
+    executor=dg.in_process_executor,
 )

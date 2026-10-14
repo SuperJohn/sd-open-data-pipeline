@@ -286,6 +286,11 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="skip the open extract (useful for closed-year backfills)",
     )
+    parser.add_argument(
+        "--skip-districts",
+        action="store_true",
+        help="do not (re)load the council district polygons",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     years = _parse_years_arg(args.years)
@@ -296,6 +301,11 @@ def main(argv: list[str] | None = None) -> None:
         include_open=not args.closed_only,
     )
     result = load_to_duckdb(files, args.db, full_refresh=args.full_refresh)
+    if not args.skip_districts:
+        from sd311.districts import load_districts, resolve_districts_file
+
+        districts = load_districts(resolve_districts_file(args.source), args.db)
+        print(f"{districts.table}: {districts.rows} districts from {districts.file}")
     year_labels = ["open" if y is None else str(y) for y in result.years]
     print(
         f"{result.table}: {result.rows:,} rows from {', '.join(result.files)} "

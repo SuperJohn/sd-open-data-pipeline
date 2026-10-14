@@ -47,3 +47,15 @@ RAW_TABLE = "get_it_done_requests"
 
 # Open-request extract has no close-year; stamped as NULL in `_source_year`.
 OPEN_SOURCE_YEAR: int | None = None
+
+# City Council district polygons (City of San Diego GIS, WGS84 lon/lat).
+# https://data.sandiego.gov/datasets/gis-city-council-districts/
+REFERENCE_DIR = DATA_DIR / "reference"
+DISTRICTS_LIVE_URL = (
+    "https://seshat.datasd.org/gis_city_council_districts/council_districts_datasd.geojson"
+)
+DISTRICTS_LIVE_FILE = "council_districts_datasd.geojson"
+# Checked-in copy simplified to ~10 m so sample mode and CI stay offline.
+DISTRICTS_SAMPLE_FILE = "council_districts_simplified.geojson"
+DISTRICTS_TABLE = "council_districts"
+EXPECTED_DISTRICTS = frozenset(range(1, 10))

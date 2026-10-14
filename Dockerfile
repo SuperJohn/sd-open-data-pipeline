@@ -30,6 +30,7 @@ COPY src ./src
 COPY dbt ./dbt
 COPY dashboard ./dashboard
 COPY data/sample ./data/sample
+COPY data/reference ./data/reference
 COPY docker/entrypoint.sh /usr/local/bin/sd311-entrypoint
 RUN uv sync --locked --no-dev
 
@@ -38,6 +39,10 @@ RUN useradd --create-home --uid 10001 app \
     && mkdir -p /app/data/warehouse /app/data/raw "${DAGSTER_HOME}" \
     && chown -R app:app /app/data /app/dbt "${DAGSTER_HOME}"
 USER app
+
+# dbt loads DuckDB `spatial` for the council-district join; install it at build time so the
+# container does not need to download extensions at runtime.
+RUN python -c "import duckdb; duckdb.connect().install_extension('spatial')"
 
 # Dagster loads the dbt manifest at import time, so parse the project into the image.
 RUN dbt parse --project-dir dbt --profiles-dir dbt --quiet
