@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from sd311 import config
+from sd311.districts import load_districts, resolve_districts_file
 from sd311.ingest import load_to_duckdb, resolve_source_files
 
 
@@ -28,6 +29,7 @@ def built_warehouse(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Load the sample and run `dbt build` once for the whole session."""
     db = tmp_path_factory.mktemp("wh") / "sd311.duckdb"
     load_to_duckdb(resolve_source_files("sample"), db)
+    load_districts(resolve_districts_file("sample"), db)
     dbt = shutil.which("dbt") or str(Path(sys.executable).parent / "dbt")
     env = {**os.environ, "SD311_DUCKDB_PATH": str(db)}
     target = tmp_path_factory.mktemp("dbt_target")

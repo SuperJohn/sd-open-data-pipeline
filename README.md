@@ -29,6 +29,9 @@ small team's first production pipeline:
   assets and asset checks, with one lineage graph from the CSV to the dashboard.
 - **Source freshness with alerting.** dbt watches `_loaded_at`; a Dagster sensor polls load
   and city-feed clocks and requests a live refresh when either goes stale.
+- **Districts from official boundaries.** Each geocoded request is placed in a City Council
+  district by point-in-polygon against the city's GIS shapes (DuckDB `spatial`), and the
+  city-reported district is kept alongside so disagreements are measurable.
 - **Laptop-to-CI parity.** The same `make` targets run locally and in GitHub Actions.
 
 ## Architecture
@@ -38,15 +41,19 @@ flowchart LR
     subgraph Source["data.sandiego.gov (public, no key)"]
         A1[get_it_done_requests_open.csv]
         A2[get_it_done_requests_closed_YYYY.csv]
+        A3[council_districts_datasd.geojson]
     end
     subgraph Ingest["Dagster asset: raw/get_it_done_requests"]
         B[sd311.ingest<br/>download + load as VARCHAR<br/>+ _source_file, _source_year, _loaded_at]
     end
+    B2[sd311.districts<br/>validate districts 1-9<br/>load GeoJSON text]
     G{{pandera gate<br/>blocking asset check}}
     subgraph DuckDB["DuckDB warehouse"]
         R[(raw.get_it_done_requests)]
+        RD[(raw.council_districts)]
+        SD[staging.stg_city_gis__council_districts<br/>GEOMETRY via spatial]
         S[staging.stg_get_it_done__requests<br/>typed · trimmed · deduped]
-        I[intermediate.int_requests__enriched<br/>lifecycle · SLA · geo validity]
+        I[intermediate.int_requests__enriched<br/>lifecycle · SLA · geo validity<br/>ST_Contains district]
         F[marts.fct_requests]
         M1[marts.mart_service_daily]
         M2[marts.mart_service_performance]
@@ -54,6 +61,7 @@ flowchart LR
     end
     D[Streamlit dashboard]
     A1 & A2 --> B --> R --> G --> S --> I --> F
+    A3 --> B2 --> RD --> SD --> I
     F --> M1 & M2 & M3 --> D
     SCH[[Dagster schedule<br/>daily 06:00 PT]] -.-> B
 ```
@@ -100,11 +108,13 @@ image and smoke-tests the whole stack on every push.
 |---|---|---|---|
 | raw | `raw.get_it_done_requests` | one row per CSV row | Idempotent load of the open extract plus closed_YYYY files from `CLOSED_START_YEAR` (default 2016) through the current year. All VARCHAR, plus `_source_file`, `_source_year` (NULL for open), and `_loaded_at`. Reloading a year replaces that partition only. |
 | staging | `stg_get_it_done__requests` | `service_request_id` | Casts with `try_cast`, trims, and turns empty strings into NULL. **Dedupes requests that appear in both extracts** while they transition, preferring the closed record. |
-| intermediate | `int_requests__enriched` | `service_request_id` | `days_to_close`, `open_age_days`, `is_open`, channel (self-service, assisted, or internal), calendar fields, and **geo validity against the city bounding box**. |
+| raw | `raw.council_districts` | one row per district | City Council district polygons as GeoJSON text, validated to exactly districts 1–9. Sample mode uses a checked-in copy simplified to ~10 m; live mode downloads the full-resolution file. |
+| staging | `stg_city_gis__council_districts` | `council_district` | Polygons parsed to DuckDB spatial `GEOMETRY` (table, parsed once). |
+| intermediate | `int_requests__enriched` | `service_request_id` | `days_to_close`, `open_age_days`, `is_open`, channel (self-service, assisted, or internal), calendar fields, **geo validity against the city bounding box**, and **council district by `ST_Contains`** (`gis_council_district`, the resolved `council_district`, its `council_district_source`, and whether the city-reported district agrees). |
 | marts | `fct_requests` | `service_request_id` | Analytics-ready fact with `closed_within_sla` (30 days by default, via `var('sla_days')`). Invalid geocodes are nulled. |
 | marts | `mart_service_daily` | `requested_date × service_name` | Opened, closed, and still-open counts, plus median days to close. |
 | marts | `mart_service_performance` | `service_name` | Volume, median and p90 days to close, SLA %, backlog, and self-service %. |
-| marts | `mart_district_performance` | `council_district` | District scorecard. |
+| marts | `mart_district_performance` | `council_district` | District scorecard on GIS-assigned districts, with `pct_assigned_by_gis` and `pct_reported_district_mismatch`. |
 
 ## Data-quality checks: what they catch
 
@@ -125,6 +135,9 @@ image and smoke-tests the whole stack on every push.
 | | `max_null_fraction(latitude / council_district, 5%)` | a geocoding outage upstream | warn |
 | | `assert_no_requests_in_future` | timezone or parse bugs | error |
 | intermediate | `in_range(days_to_close, 0, 3650)` | decade-old tickets closed in bulk (data hygiene) | warn |
+| Ingest (districts) | exactly districts 1–9, polygon geometry, no duplicates | a truncated or changed boundary file | **block** |
+| intermediate | `assert_geocoded_requests_get_gis_district` (≤ 2% outside every polygon) | wrong or incomplete boundary file | warn |
+| | `assert_reported_district_mostly_matches_gis` (≤ 2% disagree) | stale districts after redistricting, swapped lat/lng | warn |
 | marts | PK tests, `unique_combination(date, service)` | fan-out in aggregates | error |
 | | `assert_daily_mart_reconciles_to_fact` | aggregates that drop or double-count rows | error |
 | | `in_range(pct_closed_within_sla, 0, 100)`, `latitude` within the bbox | metric bugs, leaked bad geocodes | error |
@@ -133,6 +146,12 @@ On the **live** extract (Oct 2026, 409,547 requests) the pipeline passes with **
 warnings**, both real findings in the source data: one request closed before its
 open date, and one ticket that took more than 10 years to close. Warnings surface in
 Dagster as failed (non-blocking) asset checks, so they're visible without paging anyone.
+
+**Districts:** on the sample, 99.9% of valid geocodes land inside a district polygon, and
+the city-reported district disagrees with the official boundary for 5 of 3,942 requests
+(0.13%), all within 5 m of the reported district's edge, inside the ~10 m tolerance of the
+simplified sample shapes. Requests without a usable geocode keep the reported
+district (`council_district_source = 'reported'`).
 
 **Coverage:** the city publishes *open* requests plus one closed extract per calendar
 year. Live ingest backfills closed files from `SD311_CLOSED_START_YEAR` / `--start-year`
@@ -147,6 +166,7 @@ src/sd311/
   contracts.py      # raw CSV schema contract (fail fast on column drift)
   ingest.py         # download + load to DuckDB (CLI: python -m sd311.ingest)
   quality.py        # pandera pre-transform gate
+  districts.py      # council district polygons: validate + load GeoJSON (CLI: python -m sd311.districts)
   freshness.py      # load + city-feed freshness clocks (dbt + Dagster sensor)
   definitions.py    # Dagster assets, checks, dbt assets, job, schedule, freshness sensors
   docs.py           # package dbt docs artifacts for GitHub Pages
@@ -157,6 +177,7 @@ dbt/
   tests/singular/   # reconciliation + future-dated requests
 dashboard/app.py    # Streamlit over the marts
 docker/entrypoint.sh # container roles: pipeline | dagster | dashboard
+data/reference/     # council district polygons, simplified to ~10 m for offline use
 data/sample/        # 4,000-row sample (1,500 open + 800/800/900 closed 2024–2026), free-text dropped
 tests/              # pytest: ingest, quality gate, dbt integration, Dagster definitions
 ```
@@ -165,7 +186,8 @@ tests/              # pytest: ingest, quality gate, dbt integration, Dagster def
 
 - [ ] Incremental dbt models (`is_incremental()`) + Dagster partitions on top of raw `_source_year`
 - [x] Backfill prior years' closed extracts (raw `_source_year` partitions, idempotent loader)
-- [ ] Spatial join to official council district and community plan polygons (DuckDB `spatial`)
+- [x] Spatial join to official council district polygons (DuckDB `spatial`)
+- [ ] Spatial join to community plan polygons
 - [x] dbt source freshness, plus Dagster FreshnessPolicy and city-feed alert sensor
 - [ ] Snapshot (SCD2) of request status to measure reopen rates
 - [ ] Publish marts to MotherDuck or Parquet on S3 and deploy the dashboard
@@ -174,6 +196,7 @@ tests/              # pytest: ingest, quality gate, dbt integration, Dagster def
 
 ## Data & license
 
-Data: [City of San Diego Open Data Portal, Get It Done](https://data.sandiego.gov/datasets/get-it-done-311/),
+Data: [City of San Diego Open Data Portal, Get It Done](https://data.sandiego.gov/datasets/get-it-done-311/)
+and [City Council Districts](https://data.sandiego.gov/datasets/gis-city-council-districts/),
 published under the portal's open data terms. The in-repo sample drops the free-text
 `public_description` column. Code: MIT.
