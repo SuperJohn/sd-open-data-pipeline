@@ -1,7 +1,8 @@
 version: 2
 models:
   - name: int_requests__enriched
-    description: Requests enriched with lifecycle flags, resolution time and calendar attributes.
+    description: Requests enriched with lifecycle flags, resolution time, calendar attributes and
+      council district assigned from official GIS boundaries.
     columns:
       - name: service_request_id
         data_tests:
@@ -23,3 +24,27 @@ models:
                   - Self-service
                   - Assisted
                   - Internal / other
+      - name: gis_council_district
+        description: District whose official polygon contains the request's geocode (null when
+          the geocode is invalid or falls outside every district).
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 1
+                max_value: 9
+      - name: council_district
+        description: GIS district when available, else the city-reported district.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 1
+                max_value: 9
+      - name: council_district_source
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - gis
+                  - reported
+                  - none

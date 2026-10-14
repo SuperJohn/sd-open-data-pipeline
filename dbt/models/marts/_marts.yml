@@ -10,6 +10,16 @@ models:
       - name: status
         data_tests:
           - not_null
+      - name: council_district
+        description: Official GIS district for valid geocodes, else the city-reported district.
+      - name: council_district_source
+        description: "'gis' (point-in-polygon), 'reported' (city value, no usable geocode), or 'none'."
+      - name: reported_council_district
+        description: council_district as published in the Get It Done extract.
+      - name: gis_council_district
+        description: District from ST_Contains against City of San Diego GIS boundaries.
+      - name: reported_district_matches_gis
+        description: Null unless both reported and GIS districts are present.
       - name: latitude
         description: Null when the geocode falls outside the city bounding box.
         data_tests:
@@ -51,3 +61,17 @@ models:
         data_tests:
           - unique
           - not_null
+      - name: pct_assigned_by_gis
+        description: Share of the district's requests placed by point-in-polygon.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: pct_reported_district_mismatch
+        description: Share of comparable requests whose city-reported district disagrees with GIS.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 100

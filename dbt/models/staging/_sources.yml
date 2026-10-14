@@ -27,3 +27,21 @@ sources:
           - min_row_count:
               arguments:
                 min_rows: 100
+      - name: council_districts
+        description: 'City Council district polygons from City of San Diego GIS, landed as GeoJSON
+          text by `sd311.districts` (Dagster asset `raw/council_districts`). Source:
+          https://data.sandiego.gov/datasets/gis-city-council-districts/
+
+          '
+        columns:
+          - name: district
+            data_tests:
+              - not_null
+              - unique
+          - name: geometry_geojson
+            data_tests:
+              - not_null
+        data_tests:
+          - min_row_count:
+              arguments:
+                min_rows: 9

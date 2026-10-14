@@ -35,6 +35,8 @@ def test_dagster_definitions_load(tmp_path):
     repo = defs.get_repository_def()
     keys = {k.to_user_string() for k in repo.asset_graph.get_all_asset_keys()}
     assert "raw/get_it_done_requests" in keys
+    assert "raw/council_districts" in keys
+    assert "staging/stg_city_gis__council_districts" in keys
     assert "marts/fct_requests" in keys
     assert repo.get_schedule_def("sd311_daily_refresh_schedule").cron_schedule == "0 6 * * *"
 

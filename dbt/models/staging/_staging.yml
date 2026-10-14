@@ -56,3 +56,19 @@ models:
                 max_fraction: 0.05
               config:
                 severity: warn
+  - name: stg_city_gis__council_districts
+    description: City Council district polygons parsed into DuckDB spatial GEOMETRY (grain =
+      council_district).
+    columns:
+      - name: council_district
+        description: Primary key (1-9).
+        data_tests:
+          - unique
+          - not_null
+          - in_range:
+              arguments:
+                min_value: 1
+                max_value: 9
+      - name: geom
+        data_tests:
+          - not_null

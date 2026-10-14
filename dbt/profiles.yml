@@ -5,3 +5,6 @@ sd311:
       type: duckdb
       path: "{{ env_var('SD311_DUCKDB_PATH', '../data/warehouse/sd311.duckdb') }}"
       threads: 4
+      # Point-in-polygon district assignment (ST_Contains) in int_requests__enriched.
+      extensions:
+        - spatial
