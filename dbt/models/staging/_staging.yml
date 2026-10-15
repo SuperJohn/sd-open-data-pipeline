@@ -1,7 +1,11 @@
 version: 2
 models:
   - name: stg_get_it_done__requests
-    description: Typed, trimmed and deduplicated 311 requests (grain = service_request_id).
+    description: >
+      Typed, trimmed and deduplicated 311 requests (grain = service_request_id).
+      Incremental table keyed on service_request_id; filters on date_requested
+      (requested_at) lookback plus ingest _loaded_at. City extracts have no
+      update_date. Use dbt --full-refresh / make dbt-full-refresh to rebuild.
     data_tests:
       - min_row_count:
           arguments:
@@ -56,6 +60,8 @@ models:
                 max_fraction: 0.05
               config:
                 severity: warn
+      - name: _loaded_at
+        description: Ingest load timestamp; incremental watermark alongside requested_at.
   - name: stg_city_gis__council_districts
     description: City Council district polygons parsed into DuckDB spatial GEOMETRY (grain =
       council_district).

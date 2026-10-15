@@ -1,7 +1,10 @@
 version: 2
 models:
   - name: fct_requests
-    description: One row per Get It Done request with lifecycle, SLA and location attributes.
+    description: >
+      One row per Get It Done request with lifecycle, SLA and location attributes.
+      Incremental on service_request_id using requested_at (date_requested) lookback
+      and _loaded_at; rebuild with --full-refresh / make dbt-full-refresh.
     columns:
       - name: service_request_id
         data_tests:
@@ -27,6 +30,8 @@ models:
               arguments:
                 min_value: 32.53
                 max_value: 33.12
+      - name: _loaded_at
+        description: Ingest load timestamp carried through for incremental watermarks.
   - name: mart_service_daily
     description: Requests opened per day and service.
     data_tests:

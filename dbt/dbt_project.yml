@@ -17,6 +17,9 @@ vars:
   sd_lng_min: -117.30
   sd_lng_max: -116.90
   sla_days: 30
+  # Days of date_requested lookback on incremental runs (staging + fact).
+  # Covers late-arriving rows near the watermark; pair with _loaded_at for reloads.
+  incremental_lookback_days: 7
 
 models:
   sd311:

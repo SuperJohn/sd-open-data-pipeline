@@ -1,6 +1,33 @@
 -- One row per service request: typed, trimmed, and deduplicated across extracts.
+--
+-- Incremental on the city date_requested watermark plus ingest _loaded_at (Get It Done
+-- has no update_date). New/reloaded raw partitions stamp a fresh _loaded_at; a short
+-- date_requested lookback covers late-arriving rows. unique_key + delete+insert upserts
+-- status transitions (open -> closed). Pass --full-refresh (make dbt-full-refresh) to rebuild.
+{{
+  config(
+    materialized='incremental',
+    unique_key='service_request_id',
+    incremental_strategy='delete+insert',
+    on_schema_change='append_new_columns',
+  )
+}}
+
 with source as (
     select * from {{ source('raw', 'get_it_done_requests') }}
+    {% if is_incremental() %}
+    where
+        _loaded_at > (
+            select coalesce(max(_loaded_at), '1900-01-01'::timestamp) from {{ this }}
+        )
+        or try_cast(date_requested as timestamp) >= (
+            select coalesce(
+                max(requested_at) - interval '{{ var("incremental_lookback_days") }}' day,
+                '1900-01-01'::timestamp
+            )
+            from {{ this }}
+        )
+    {% endif %}
 ),
 
 typed as (
