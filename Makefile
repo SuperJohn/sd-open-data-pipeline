@@ -9,7 +9,7 @@ RUN := uv run
 DBT := $(RUN) dbt --no-use-colors
 DBT_ARGS := --project-dir dbt --profiles-dir dbt
 
-.PHONY: help setup ingest dbt-build freshness docs run dev test lint format dashboard up down clean
+.PHONY: help setup ingest dbt-build dbt-full-refresh freshness docs run dev test lint format dashboard up down clean
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -22,8 +22,17 @@ setup:  ## Install Python deps (uv) and parse the dbt project
 ingest:  ## Load raw CSVs into DuckDB (SOURCE=sample|live, START_YEAR=2016)
 	$(RUN) python -m sd311.ingest --source $(SD311_SOURCE) --start-year $(SD311_CLOSED_START_YEAR)
 
-dbt-build:  ## dbt build (models + tests) against the current warehouse
+FULL_REFRESH ?= 0
+
+dbt-build:  ## dbt build (models + tests); FULL_REFRESH=1 rebuilds incremental models
+ifeq ($(FULL_REFRESH),1)
+	$(DBT) build $(DBT_ARGS) --full-refresh
+else
 	$(DBT) build $(DBT_ARGS)
+endif
+
+dbt-full-refresh:  ## dbt build --full-refresh (rebuild staging + fact incremental models)
+	$(DBT) build $(DBT_ARGS) --full-refresh
 
 freshness:  ## dbt source freshness (warn/error on stale _loaded_at)
 	$(DBT) source freshness $(DBT_ARGS)

@@ -10,16 +10,17 @@ service-request analytics warehouse.
 | Layer | Schema | Role |
 |---|---|---|
 | raw | `raw` | Landing zone — all VARCHAR plus `_source_file` / `_loaded_at`; council district polygons as GeoJSON text |
-| staging | `staging` | Typed, trimmed, deduped requests; district polygons as DuckDB spatial GEOMETRY |
+| staging | `staging` | Typed, trimmed, deduped requests (incremental on `date_requested` / `_loaded_at`); district polygons as DuckDB spatial GEOMETRY |
 | intermediate | `intermediate` | Lifecycle, SLA, geo-validity, and point-in-polygon council district enrichment |
-| marts | `marts` | Analytics-ready facts and district/service scorecards |
+| marts | `marts` | Analytics-ready facts (`fct_requests` incremental) and district/service scorecards |
 
 ## How to regenerate
 
 ```bash
 make ingest SOURCE=sample
-make dbt-build
-make docs          # writes site/ for local preview or Pages deploy
+make dbt-build            # incremental by default
+make dbt-full-refresh     # rebuild staging + fact from scratch
+make docs                 # writes site/ for local preview or Pages deploy
 ```
 
 Source data: [data.sandiego.gov — Get It Done](https://data.sandiego.gov/datasets/get-it-done-311/)

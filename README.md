@@ -21,6 +21,10 @@ small team's first production pipeline:
 
 - **Idempotent, year-partitioned loads.** Raw data lands as untyped VARCHAR with file and
   close-year lineage (`_source_year`); reloading one year does not touch the others.
+- **Incremental dbt models.** Staging and `fct_requests` upsert on `service_request_id`
+  using `date_requested` (`requested_at`) lookback plus ingest `_loaded_at` (the city
+  extract has no `update_date`). `make dbt-build` is incremental; `make dbt-full-refresh`
+  (or `FULL_REFRESH=1`) rebuilds from scratch.
 - **Layered dbt models** with tests at every layer, including custom generic tests and a
   reconciliation test between the fact table and the aggregates.
 - **A blocking quality gate before transformation.** A pandera schema check runs as a
@@ -52,9 +56,9 @@ flowchart LR
         R[(raw.get_it_done_requests)]
         RD[(raw.council_districts)]
         SD[staging.stg_city_gis__council_districts<br/>GEOMETRY via spatial]
-        S[staging.stg_get_it_done__requests<br/>typed · trimmed · deduped]
+        S[staging.stg_get_it_done__requests<br/>typed · trimmed · deduped · incremental]
         I[intermediate.int_requests__enriched<br/>lifecycle · SLA · geo validity<br/>ST_Contains district]
-        F[marts.fct_requests]
+        F[marts.fct_requests<br/>incremental upsert]
         M1[marts.mart_service_daily]
         M2[marts.mart_service_performance]
         M3[marts.mart_district_performance]
@@ -77,6 +81,8 @@ make dashboard            # http://localhost:8501
 
 make run SOURCE=live      # open + closed years 2016→current (~GB-scale download)
 make ingest START_YEAR=2020 SOURCE=live   # backfill closed years from 2020 only
+make dbt-build            # incremental staging + fact (default)
+make dbt-full-refresh     # rebuild incremental models from scratch
 make dev                  # Dagster UI at http://localhost:3000 (lineage, checks, schedule)
 make test                 # ruff + pytest (unit + dbt integration)
 make freshness            # dbt source freshness against the current warehouse
@@ -184,7 +190,8 @@ tests/              # pytest: ingest, quality gate, dbt integration, Dagster def
 
 ## Roadmap
 
-- [ ] Incremental dbt models (`is_incremental()`) + Dagster partitions on top of raw `_source_year`
+- [x] Incremental dbt models (`is_incremental()` on staging + fact; `make dbt-full-refresh`)
+- [ ] Dagster partitions on top of raw `_source_year`
 - [x] Backfill prior years' closed extracts (raw `_source_year` partitions, idempotent loader)
 - [x] Spatial join to official council district polygons (DuckDB `spatial`)
 - [ ] Spatial join to community plan polygons
