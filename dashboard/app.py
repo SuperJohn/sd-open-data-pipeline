@@ -9,6 +9,13 @@ import duckdb
 import plotly.express as px
 import streamlit as st
 
+from sd311.dashboard import (
+    list_services,
+    open_requests_map,
+    service_filter_sql,
+    service_sla_weekly,
+)
+
 DB_PATH = Path(
     os.getenv(
         "SD311_DUCKDB_PATH",
@@ -35,13 +42,10 @@ st.caption(
     "Pipeline: DuckDB → dbt → Dagster. Marts refreshed daily."
 )
 
-services = q("select service_name from marts.mart_service_performance order by total_requests desc")
-picked = st.sidebar.multiselect("Services", services["service_name"].tolist())
-svc_filter = (
-    "where service_name in (" + ",".join("'" + s.replace("'", "''") + "'" for s in picked) + ")"
-    if picked
-    else ""
-)
+services = list_services(DB_PATH)
+picked = st.sidebar.multiselect("Services", services)
+svc_clause = service_filter_sql(picked)
+svc_filter = f"where {svc_clause}" if svc_clause else ""
 
 kpi = q(
     f"""
@@ -106,12 +110,47 @@ with right:
         width="stretch",
     )
 
-st.subheader("Where requests come from")
-pts = q(
-    f"""select latitude as lat, longitude as lon from marts.fct_requests
-        {svc_filter} {"and" if svc_filter else "where"} has_valid_geo using sample 5000 rows"""
+st.subheader("Open requests map")
+st.caption(
+    "Geocoded open backlog only (sampled). Use the Services filter in the sidebar to drill down."
 )
-st.map(pts, size=20)
+open_pts = open_requests_map(DB_PATH, services=picked or None)
+if open_pts.empty:
+    st.info("No open geocoded requests match the current filter.")
+else:
+    st.map(open_pts[["lat", "lon"]], size=20)
+    st.caption(f"{len(open_pts):,} open points shown")
+
+st.subheader("Per-service SLA trend")
+st.caption(
+    "Share of requests closed within the 30-day SLA, by week closed. "
+    "With no service filter, shows the eight highest-volume services in the window."
+)
+sla_weeks = st.sidebar.slider("SLA trend weeks", min_value=8, max_value=52, value=26, step=1)
+sla = service_sla_weekly(
+    DB_PATH,
+    services=picked or None,
+    weeks=sla_weeks,
+    top_n=8,
+)
+if sla.empty:
+    st.info("No closed requests in the selected window.")
+else:
+    fig = px.line(
+        sla,
+        x="week",
+        y="sla_pct",
+        color="service_name",
+        markers=True,
+        labels={
+            "week": "Week closed",
+            "sla_pct": "% closed within SLA",
+            "service_name": "Service",
+        },
+        hover_data=["closed_count"],
+    )
+    fig.update_yaxes(range=[0, 100])
+    st.plotly_chart(fig, width="stretch")
 
 with st.expander("Service performance table"):
     st.dataframe(

@@ -181,7 +181,8 @@ dbt/
   models/{staging,intermediate,marts}/
   tests/generic/    # in_range, not_before, max_null_fraction, min_row_count, unique_combination
   tests/singular/   # reconciliation + future-dated requests
-dashboard/app.py    # Streamlit over the marts
+dashboard/app.py    # Streamlit over the marts (open-request map + per-service SLA trends)
+src/sd311/dashboard.py  # query helpers for the dashboard (tested)
 docker/entrypoint.sh # container roles: pipeline | dagster | dashboard
 data/reference/     # council district polygons, simplified to ~10 m for offline use
 data/sample/        # 4,000-row sample (1,500 open + 800/800/900 closed 2024–2026), free-text dropped
@@ -197,6 +198,7 @@ tests/              # pytest: ingest, quality gate, dbt integration, Dagster def
 - [ ] Spatial join to community plan polygons
 - [x] dbt source freshness, plus Dagster FreshnessPolicy and city-feed alert sensor
 - [ ] Snapshot (SCD2) of request status to measure reopen rates
+- [x] Dashboard: map of open requests + per-service SLA trend drilldown
 - [ ] Publish marts to MotherDuck or Parquet on S3 and deploy the dashboard
 - [x] Publish dbt docs to GitHub Pages (CI builds `site/`, deploys on main)
 - [ ] Data contracts on the marts (dbt model contracts + versioned schemas)
